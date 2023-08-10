@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #pragma pack(1) // Asegura el alineamiento de 1 byte
 
 // Estructura de cabecera
@@ -22,19 +23,31 @@ typedef struct {
     int importantColors;  // (Contador de colores importantes
 } BMPHeader;
 
-// Structure for  BMP image pixels
+// Estructura para pixeles de imagenes BMP
 typedef struct {
     unsigned char blue;
     unsigned char green;
     unsigned char red;
 } Pixel;
 
-const char* outputFilePathGS = "GrayScaleConversion.bmp";
-const char* outputFilePathCV = "convolution.bmp";
+// Definición de los kernels Sobel
+int sobel_x[3][3] = {{-1, 0, 1},
+                     {-2, 0, 2},
+                     {-1, 0, 1}};
+
+int sobel_y[3][3] = {{-1, -2, -1},
+                     { 0,  0,  0},
+                     { 1,  2,  1}};
+
+const char* outputFilePathGS = "GrayScaleConversion1.bmp";
+const char* outputFilePathCV = "convolution2.bmp";
+const char* outputFilePathCS = "convolutionSobel.bmp";
+
 
 // Functions to process the image
 void grayscale(Pixel* pixels, int width, int height, BMPHeader head);
 void convolution(Pixel* pixels, int width, int height, int** kernel, BMPHeader head);
+void sobelOperator(Pixel *pixels, int width, int height, BMPHeader head);
 void safeImageBMP(Pixel *imagePixels, const char* outputFilePath, int width, int height, BMPHeader head);
 int** createMatrix();
 void printKernel(int** matrix);
@@ -47,7 +60,7 @@ int main() {
     int** kernel;
 
     // Abrir el archivo BMP en modo binario de lectura
-    bmpFile = fopen("D:/Users/santi/Desktop/lab1/lab1 Procesamiento de imagenes/rick-morty.bmp", "rb");
+    bmpFile = fopen("C:/Users/HABI/Desktop/SistemasEmbebidos/GrayScaleConversion1.bmp", "rb");
     if (bmpFile == NULL) {
         printf("No se pudo abrir el archivo BMP.\n");
         return 1;
@@ -67,7 +80,7 @@ int main() {
     height = header.imageHeight;
 
     // Separa memoria para la matriz
-    pixels = (Pixel *)malloc(width * height * sizeof(Pixel));
+    pixels = (Pixel *)malloc(width * height * sizeof(Pixel)); //asignacion dinamica de memoria
     if (pixels == NULL) {
         printf("Error al asignar memoria para la matriz de píxeles.\n");
         fclose(bmpFile);
@@ -87,6 +100,7 @@ int main() {
     printf("Menu:\n");
     printf("1. Escala de grises\n");
     printf("2. Convolucion\n");
+    printf("3. Operador Sobel\n");
     printf("Elija una opcion\n");
     scanf_s("%d", &option);
 
@@ -98,6 +112,9 @@ int main() {
             kernel = createMatrix();
             printKernel(kernel);
             convolution(pixels, width, height, kernel, header);
+            break;
+        case 3:
+            sobelOperator(pixels, width, height, header);
             break;
         default:
             printf("Opción no válida.\n");
@@ -219,5 +236,53 @@ void printKernel(int** matrix){
     }
 
 }
+
+void convolutionSobel(Pixel *pixels, int width, int height, int kernel[3][3], Pixel *output, BMPHeader head) {
+    int index, indexAux;
+    for (int j = 1; j < height - 1; ++j) {
+        for (int i = 1; i < width - 1; ++i) {
+            int sumaRed = 0;
+            int sumaGreen = 0;
+            int sumaBlue = 0;
+            for (int u = 0; u < 3; ++u) {
+                for (int v = 0; v < 3; ++v) {
+                    index = (j - u + 1) * width + (i - v + 1);
+                    sumaRed += pixels[index].red * kernel[u][v];
+                    sumaGreen += pixels[index].green * kernel[u][v];
+                    sumaBlue += pixels[index].blue * kernel[u][v];
+                }
+            }
+            indexAux = j * width + i;
+            output[indexAux].red = (unsigned char)(sumaRed / 9);
+            output[indexAux].green = (unsigned char)(sumaGreen / 9);
+            output[indexAux].blue = (unsigned char)(sumaBlue / 9);
+        }
+    }
+}
+
+
+void sobelOperator(Pixel *pixels, int width, int height, BMPHeader head) {
+    Pixel *sobel_pixels_x = (Pixel *)malloc(width * height * sizeof(Pixel));
+    Pixel *sobel_pixels_y = (Pixel *)malloc(width * height * sizeof(Pixel));
+
+    convolutionSobel(pixels, width, height, sobel_x, sobel_pixels_x, head);
+    convolutionSobel(pixels, width, height, sobel_y, sobel_pixels_y, head);
+
+    // Calcular el gradiente y almacenar los resultados en una nueva matriz
+    Pixel *sobel_pixels = (Pixel *)malloc(width * height * sizeof(Pixel));
+    for (int i = 0; i < width * height; ++i) {
+        int gradient = (int)sqrt(sobel_pixels_x[i].red * sobel_pixels_x[i].red + sobel_pixels_y[i].red * sobel_pixels_y[i].red);
+        sobel_pixels[i].red = sobel_pixels[i].green = sobel_pixels[i].blue = gradient;
+    }
+
+    // Guardar la imagen resultante en el archivo de salida
+    safeImageBMP(sobel_pixels, outputFilePathCS, width, height, head);
+
+    // Liberar memoria
+    free(sobel_pixels_x);
+    free(sobel_pixels_y);
+    free(sobel_pixels);
+}
+
 
 
